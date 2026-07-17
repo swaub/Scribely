@@ -1,11 +1,11 @@
 # ------------------------------------------------------------------ #
-#  YTTranscript.exe -- mingw-w64 cross build from WSL.
+#  Scribely.exe -- mingw-w64 cross build from WSL.
 #
 #  Prereq (one time):
 #    sudo apt-get install -y gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64
 #
 #  Usage:
-#    make          # build dist/YTTranscript.exe
+#    make          # build dist/Scribely.exe
 #    make clean     # remove build/ and dist/
 # ------------------------------------------------------------------ #
 
@@ -17,7 +17,7 @@ CFLAGS  := -std=c11 -municode -mwindows -static -O2 \
            -Wall -Wextra
 
 LDLIBS  := -lcomctl32 -lwinhttp -lshlwapi -ldxgi -ldxguid \
-           -luser32 -lgdi32 -lkernel32
+           -luser32 -lgdi32 -lkernel32 -lcomdlg32 -lshell32
 
 SRCDIR  := src
 RESDIR  := res
@@ -31,7 +31,7 @@ SRCS := $(SRCDIR)/main.c $(SRCDIR)/ui.c $(SRCDIR)/util.c $(SRCDIR)/proc.c \
 
 OBJS := $(patsubst $(SRCDIR)/%.c,$(OBJDIR)/%.o,$(SRCS))
 RES  := $(OBJDIR)/app.res
-TARGET := $(DISTDIR)/YTTranscript.exe
+TARGET := $(DISTDIR)/Scribely.exe
 
 .PHONY: all clean
 all: $(TARGET)

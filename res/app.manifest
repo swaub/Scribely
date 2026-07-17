@@ -4,7 +4,7 @@
 
   <assemblyIdentity
       type="win32"
-      name="YTTranscript"
+      name="Scribely"
       version="1.0.0.0"
       processorArchitecture="amd64"/>
 

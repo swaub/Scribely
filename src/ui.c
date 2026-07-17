@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ *
- *  ui.c  --  WndProc and all UI-thread logic for YTTranscript.exe.
+ *  ui.c  --  WndProc and all UI-thread logic for Scribely.exe.
  *
  *  Owns every HWND.  Builds the controls in WM_CREATE, lays them out
  *  DPI-scaled in LayoutChildren, dispatches the Transcribe/Summarize/
@@ -14,6 +14,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <wchar.h>
+#include <shellapi.h>
+#include <commdlg.h>
 #define _RICHEDIT_VER 0x0300
 #include <richedit.h>
 
@@ -292,6 +294,7 @@ static void UpdateButtons(AppState *app)
 {
     BOOL busy = (app->busy != 0);
     EnableWindow(app->hUrl,        !busy);
+    EnableWindow(app->hBrowse,     !busy && g_bootDone);
     EnableWindow(app->hTranscribe, !busy && g_bootDone);
     EnableWindow(app->hSummarize,  !busy && g_bootDone && g_haveTranscript);
     EnableWindow(app->hCopy,       !busy && g_haveSummary);
@@ -312,7 +315,7 @@ static void WorkerFinished(AppState *app)
 }
 
 static void StartWorker(AppState *app, int stage,
-                        const WCHAR *url, WCHAR *transcript)
+                        const WCHAR *url, WCHAR *transcript, BOOL isLocal)
 {
     if (app->hWorker) {
         CloseHandle(app->hWorker);
@@ -330,6 +333,7 @@ static void StartWorker(AppState *app, int stage,
     wa->stage = stage;
     if (url)
         lstrcpynW(wa->url, url, 2048);
+    wa->isLocal    = isLocal;
     wa->transcript = transcript;
 
     InterlockedExchange(&app->cancelFlag, 0);
@@ -363,18 +367,28 @@ static void OnTranscribe(AppState *app)
     if (!g_bootDone) {
         MessageBoxW(app->hMain,
                     L"Components are still being prepared. Please wait.",
-                    L"YTTranscript", MB_OK | MB_ICONINFORMATION);
+                    L"Scribely", MB_OK | MB_ICONINFORMATION);
         return;
     }
 
     WCHAR url[2048];
     GetWindowTextW(app->hUrl, url, 2048);
 
-    if (!IsPlausibleYouTubeUrl(url)) {
+    /* Strip surrounding quotes Explorer's "Copy as path" adds. */
+    size_t ulen = wcslen(url);
+    if (ulen >= 2 && url[0] == L'"' && url[ulen - 1] == L'"') {
+        memmove(url, url + 1, (ulen - 2) * sizeof(WCHAR));
+        url[ulen - 2] = L'\0';
+    }
+
+    BOOL isLocal = IsSupportedMediaFile(url);
+    if (!isLocal && !IsPlausibleYouTubeUrl(url)) {
         MessageBoxW(app->hMain,
                     L"Please enter a valid YouTube URL\n"
-                    L"(youtube.com, m.youtube.com or youtu.be).",
-                    L"Invalid URL", MB_OK | MB_ICONWARNING);
+                    L"(youtube.com, m.youtube.com or youtu.be),\n"
+                    L"or the path of an audio/video file —\n"
+                    L"you can also drop a file onto this window.",
+                    L"Invalid input", MB_OK | MB_ICONWARNING);
         SetFocus(app->hUrl);
         return;
     }
@@ -386,7 +400,64 @@ static void OnTranscribe(AppState *app)
     SetWindowTextW(app->hStatus, L"Starting transcription…");
     ProgressMarquee(app, TRUE);
 
-    StartWorker(app, STAGE_TRANSCRIBE, url, NULL);
+    StartWorker(app, STAGE_TRANSCRIBE, url, NULL, isLocal);
+}
+
+static void OnBrowse(AppState *app)
+{
+    if (app->busy)
+        return;
+
+    WCHAR file[2048] = L"";
+    OPENFILENAMEW ofn;
+    ZeroMemory(&ofn, sizeof ofn);
+    ofn.lStructSize = sizeof ofn;
+    ofn.hwndOwner   = app->hMain;
+    ofn.lpstrTitle  = L"Open audio or video file";
+    ofn.lpstrFilter =
+        L"Media files\0"
+        L"*.mp3;*.wav;*.flac;*.ogg;*.oga;*.opus;*.m4a;*.aac;*.wma;*.mka;"
+        L"*.aif;*.aiff;*.amr;*.mp4;*.m4v;*.mkv;*.webm;*.mov;*.avi;*.wmv;"
+        L"*.ts;*.mts;*.m2ts;*.3gp;*.flv;*.mpg;*.mpeg\0"
+        L"All files\0*.*\0";
+    ofn.lpstrFile   = file;
+    ofn.nMaxFile    = ARRAYSIZE(file);
+    ofn.Flags       = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
+
+    if (!GetOpenFileNameW(&ofn))
+        return;
+
+    if (!IsSupportedMediaFile(file)) {
+        MessageBoxW(app->hMain,
+                    L"That file type is not a supported audio/video format.",
+                    L"Scribely", MB_OK | MB_ICONWARNING);
+        return;
+    }
+
+    SetWindowTextW(app->hUrl, file);
+    OnTranscribe(app);
+}
+
+static void OnDropFiles(AppState *app, HDROP drop)
+{
+    WCHAR file[2048] = L"";
+    DragQueryFileW(drop, 0, file, ARRAYSIZE(file));
+    DragFinish(drop);
+
+    if (app->busy) {
+        SetWindowTextW(app->hStatus,
+                       L"Busy — wait for the current task to finish, then drop the file again.");
+        return;
+    }
+    if (!IsSupportedMediaFile(file)) {
+        MessageBoxW(app->hMain,
+                    L"That file type is not a supported audio/video format.",
+                    L"Scribely", MB_OK | MB_ICONWARNING);
+        return;
+    }
+
+    SetWindowTextW(app->hUrl, file);
+    OnTranscribe(app);
 }
 
 static void OnSummarize(AppState *app)
@@ -395,14 +466,14 @@ static void OnSummarize(AppState *app)
         return;
     if (!g_haveTranscript) {
         MessageBoxW(app->hMain, L"Transcribe a video first.",
-                    L"YTTranscript", MB_OK | MB_ICONINFORMATION);
+                    L"Scribely", MB_OK | MB_ICONINFORMATION);
         return;
     }
 
     int len = GetWindowTextLengthW(app->hTranscript);
     if (len <= 0) {
         MessageBoxW(app->hMain, L"The transcript is empty.",
-                    L"YTTranscript", MB_OK | MB_ICONINFORMATION);
+                    L"Scribely", MB_OK | MB_ICONINFORMATION);
         return;
     }
 
@@ -418,7 +489,7 @@ static void OnSummarize(AppState *app)
     SetWindowTextW(app->hStatus, L"Summarizing…");
     ProgressMarquee(app, TRUE);
 
-    StartWorker(app, STAGE_SUMMARIZE, NULL, buf);
+    StartWorker(app, STAGE_SUMMARIZE, NULL, buf, FALSE);
 }
 
 static void OnCopy(AppState *app)
@@ -426,7 +497,7 @@ static void OnCopy(AppState *app)
     int len = GetWindowTextLengthW(app->hSummary);
     if (len <= 0) {
         MessageBoxW(app->hMain, L"There is no summary to copy yet.",
-                    L"YTTranscript", MB_OK | MB_ICONINFORMATION);
+                    L"Scribely", MB_OK | MB_ICONINFORMATION);
         return;
     }
 
@@ -457,7 +528,7 @@ static void OnEncoderSettings(AppState *app)
 {
     if (app->busy) {
         MessageBoxW(app->hMain, L"Please wait for the current task to finish.",
-                    L"YTTranscript", MB_OK | MB_ICONINFORMATION);
+                    L"Scribely", MB_OK | MB_ICONINFORMATION);
         return;
     }
     ShowEncoderDialog(app);
@@ -465,7 +536,7 @@ static void OnEncoderSettings(AppState *app)
     if (BackendNeeded(app)) {
         SetWindowTextW(app->hStatus, L"Preparing GPU backend…");
         ProgressMarquee(app, TRUE);
-        StartWorker(app, STAGE_BACKEND, NULL, NULL);
+        StartWorker(app, STAGE_BACKEND, NULL, NULL, FALSE);
     }
 }
 
@@ -520,16 +591,20 @@ void LayoutChildren(AppState *app)
                        SWP_NOZORDER | SWP_NOACTIVATE);
     y += lblH + SC(4);
 
-    int editW = fullW - 2 * (bw + gap);
+    int bwSmall = SC(84);
+    int editW = fullW - 2 * (bw + gap) - (bwSmall + gap);
     if (editW < SC(140))
         editW = SC(140);
     h = DeferWindowPos(h, app->hUrl, NULL, x, y, editW, rh,
                        SWP_NOZORDER | SWP_NOACTIVATE);
+    h = DeferWindowPos(h, app->hBrowse, NULL,
+                       x + editW + gap, y, bwSmall, rh,
+                       SWP_NOZORDER | SWP_NOACTIVATE);
     h = DeferWindowPos(h, app->hTranscribe, NULL,
-                       x + editW + gap, y, bw, rh,
+                       x + editW + gap + bwSmall + gap, y, bw, rh,
                        SWP_NOZORDER | SWP_NOACTIVATE);
     h = DeferWindowPos(h, app->hCancel, NULL,
-                       x + editW + gap + bw + gap, y, bw, rh,
+                       x + editW + gap + bwSmall + gap + bw + gap, y, bw, rh,
                        SWP_NOZORDER | SWP_NOACTIVATE);
     y += rh + gap;
 
@@ -588,7 +663,7 @@ static void BuildControls(HWND hwnd, AppState *app, HINSTANCE hInst)
     app->hMain     = hwnd;
     app->hUiFont   = CreateUiFont(hwnd);
 
-    CreateWindowExW(0, L"STATIC", L"&YouTube URL:",
+    CreateWindowExW(0, L"STATIC", L"&YouTube URL or media file:",
                     WS_CHILD | WS_VISIBLE | SS_LEFT,
                     0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_URL_LABEL,
                     hInst, NULL);
@@ -598,7 +673,12 @@ static void BuildControls(HWND hwnd, AppState *app, HINSTANCE hInst)
                     0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_URL, hInst, NULL);
     SendMessageW(app->hUrl, EM_SETLIMITTEXT, 2040, 0);
     SendMessageW(app->hUrl, EM_SETCUEBANNER, TRUE,
-                 (LPARAM)L"https://www.youtube.com/watch?v=…");
+                 (LPARAM)L"Paste a YouTube URL, or drop an audio/video file anywhere in this window…");
+
+    app->hBrowse = CreateWindowExW(0, L"BUTTON", L"&Open…",
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+                    0, 0, 0, 0, hwnd, (HMENU)(INT_PTR)IDC_BROWSE,
+                    hInst, NULL);
 
     app->hTranscribe = CreateWindowExW(0, L"BUTTON", L"&Transcribe",
                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
@@ -683,6 +763,8 @@ static void BuildControls(HWND hwnd, AppState *app, HINSTANCE hInst)
         SendMessageW(tip, TTM_ADDTOOLW, 0, (LPARAM)&ti);
     }
 
+    DragAcceptFiles(hwnd, TRUE);
+
     ApplyFontToAll(app);
     UpdateButtons(app);
     LayoutChildren(app);
@@ -758,6 +840,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         if (app && HIWORD(wParam) == BN_CLICKED) {
             switch (LOWORD(wParam)) {
             case IDC_TRANSCRIBE: OnTranscribe(app); return 0;
+            case IDC_BROWSE:     OnBrowse(app);     return 0;
             case IDC_SUMMARIZE:  OnSummarize(app);  return 0;
             case IDC_COPY:       OnCopy(app);       return 0;
             case IDC_CANCEL:     OnCancel(app);     return 0;
@@ -765,6 +848,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             }
         }
         break;
+
+    case WM_DROPFILES:
+        if (app)
+            OnDropFiles(app, (HDROP)wParam);
+        return 0;
 
     case WM_CTLCOLORSTATIC:
         if (app) {
@@ -818,7 +906,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             g_bootDone = TRUE;
             ProgressPct(app, 0);
             SetWindowTextW(app->hStatus,
-                L"Ready. Paste a YouTube URL and click Transcribe.");
+                L"Ready. Paste a YouTube URL, open a file, or drop one onto the window.");
             WorkerFinished(app);
         }
         return 0;
@@ -960,7 +1048,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             ProgressPct(app, 0);
             if (s) {
                 SetWindowTextW(app->hStatus, s);
-                MessageBoxW(app->hMain, s, L"YTTranscript — Error",
+                MessageBoxW(app->hMain, s, L"Scribely — Error",
                             MB_OK | MB_ICONERROR);
             }
             WorkerFinished(app);

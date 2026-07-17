@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ *
- *  proc.c -- safe subprocess execution for YTTranscript.
+ *  proc.c -- safe subprocess execution for Scribely.
  *
  *  ArgAppend  : CommandLineToArgvW-correct quoting/escaping so a hostile
  *               argument (the YouTube URL, paths with spaces) can never

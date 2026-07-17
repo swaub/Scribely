@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ *
- *  main.c  --  wWinMain entry point for YTTranscript.exe.
+ *  main.c  --  wWinMain entry point for Scribely.exe.
  *
  *  Responsibilities (per spec):
  *    - SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2) BEFORE any
@@ -20,7 +20,7 @@
 #include <stdlib.h>
 #include <wchar.h>
 
-static const WCHAR kClassName[] = L"YTTranscriptMainWindow";
+static const WCHAR kClassName[] = L"ScribelyMainWindow";
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                     PWSTR lpCmdLine, int nCmdShow)
@@ -92,7 +92,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     HWND hwnd = CreateWindowExW(
         0,
         kClassName,
-        L"YTTranscript — YouTube Transcribe & Summarize",
+        L"Scribely — Transcribe & Summarize",
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
         CW_USEDEFAULT, CW_USEDEFAULT, 920, 740,
         NULL, NULL, hInstance, app);

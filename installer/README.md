@@ -1,14 +1,14 @@
-# YTTranscript installer
+# Scribely installer
 
-Builds `YTTranscript-Setup-x.y.z.exe` with [Inno Setup 6](https://jrsoftware.org/isinfo.php).
+Builds `Scribely-Setup-x.y.z.exe` with [Inno Setup 6](https://jrsoftware.org/isinfo.php).
 
-The installer is intentionally tiny: it ships only `YTTranscript.exe`. All heavy
+The installer is intentionally tiny: it ships only `Scribely.exe`. All heavy
 components (yt-dlp, FFmpeg, whisper.cpp, llama.cpp, and the models) are
 downloaded by the app on first run.
 
 ## Prerequisites
 
-1. Build the app first so `dist\YTTranscript.exe` exists:
+1. Build the app first so `dist\Scribely.exe` exists:
    ```sh
    bash build.sh
    ```
@@ -19,7 +19,7 @@ downloaded by the app on first run.
 From the project root (Windows):
 
 ```bat
-"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\YTTranscript.iss
+"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\Scribely.iss
 ```
 
 The signed-and-sealed installer lands in `installer\Output\`.
@@ -36,4 +36,4 @@ The signed-and-sealed installer lands in `installer\Output\`.
   (defaults to keeping them, to avoid a ~2 GB re-download on reinstall).
 
 To bump the version, edit `#define AppVersion` at the top of
-`YTTranscript.iss` (and the `VERSIONINFO` in `res/app.rc`).
+`Scribely.iss` (and the `VERSIONINFO` in `res/app.rc`).

@@ -25,7 +25,7 @@ static int EngFromStr(const char *s)
 
 static void CfgPath(const AppState *app, WCHAR *out)
 {
-    PathCombineW(out, app->paths.exeDir, L"settings.cfg");
+    PathCombineW(out, app->paths.dataDir, L"settings.cfg");
 }
 
 /* A selection is only honored if the hardware actually supports it. */

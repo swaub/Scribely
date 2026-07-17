@@ -155,26 +155,42 @@ unsigned __stdcall TranscribeThread(void *argp)
     WCHAR cmd[8192];
     WCHAR id[MAX_PATH];
 
-    /* ---------------- stage 1: yt-dlp -------------------------- */
+    /* ---------------- stage 1: yt-dlp (or a local file) -------- */
+    if (a->isLocal) {
+        postStatus(h, L"Preparing local file…");
+        postMarquee(h);
+
+        audioW = _wcsdup(a->url);
+        if (!audioW || !FileExists(audioW)) {
+            postError(h, L"The selected media file could not be opened.");
+            goto cleanup;
+        }
+        const WCHAR *fn = PathFindFileNameW(audioW);
+        wcsncpy(id, fn, MAX_PATH - 1);
+        id[MAX_PATH - 1] = L'\0';
+        WCHAR *dot = wcsrchr(id, L'.');
+        if (dot) *dot = L'\0';
+        if (!id[0]) {
+            wcscpy(id, L"local");
+        }
+    } else {
     postStatus(h, L"Downloading audio…");
     postMarquee(h);
 
     {
-        WCHAR ytexe[MAX_PATH], ffloc[MAX_PATH], outtpl[MAX_PATH];
-        _snwprintf(ytexe, MAX_PATH, L"%s\\yt-dlp.exe", app->paths.bin);
-        _snwprintf(ffloc, MAX_PATH, L"%s\\ffmpeg.exe", app->paths.bin);
+        WCHAR outtpl[MAX_PATH];
         _snwprintf(outtpl, MAX_PATH, L"%s\\%%(id)s.%%(ext)s", app->paths.temp);
-        ytexe[MAX_PATH - 1] = ffloc[MAX_PATH - 1] = outtpl[MAX_PATH - 1] = L'\0';
+        outtpl[MAX_PATH - 1] = L'\0';
 
         cmd[0] = L'\0';
-        ArgAppend(cmd, 8192, ytexe);
+        ArgAppend(cmd, 8192, app->paths.ytdlpExe);
         ArgAppend(cmd, 8192, L"-f");                ArgAppend(cmd, 8192, L"bestaudio/best");
         ArgAppend(cmd, 8192, L"--no-playlist");
         ArgAppend(cmd, 8192, L"--no-part");
         ArgAppend(cmd, 8192, L"--no-continue");
         ArgAppend(cmd, 8192, L"--force-overwrites");
         ArgAppend(cmd, 8192, L"--newline");
-        ArgAppend(cmd, 8192, L"--ffmpeg-location"); ArgAppend(cmd, 8192, ffloc);
+        ArgAppend(cmd, 8192, L"--ffmpeg-location"); ArgAppend(cmd, 8192, app->paths.ffmpegExe);
         ArgAppend(cmd, 8192, L"-o");                ArgAppend(cmd, 8192, outtpl);
         ArgAppend(cmd, 8192, L"--print");           ArgAppend(cmd, 8192, L"after_move:filepath");
         ArgAppend(cmd, 8192, L"--");
@@ -207,6 +223,7 @@ unsigned __stdcall TranscribeThread(void *argp)
         WCHAR *dot = wcsrchr(id, L'.');
         if (dot) *dot = L'\0';
     }
+    }
 
     if (app->cancelFlag) goto cancelled;
 
@@ -216,13 +233,11 @@ unsigned __stdcall TranscribeThread(void *argp)
 
     WCHAR wav[MAX_PATH];
     {
-        WCHAR ffexe[MAX_PATH];
-        _snwprintf(ffexe, MAX_PATH, L"%s\\ffmpeg.exe", app->paths.bin);
-        _snwprintf(wav,   MAX_PATH, L"%s\\%s.wav", app->paths.temp, id);
-        ffexe[MAX_PATH - 1] = wav[MAX_PATH - 1] = L'\0';
+        _snwprintf(wav, MAX_PATH, L"%s\\%s.wav", app->paths.temp, id);
+        wav[MAX_PATH - 1] = L'\0';
 
         cmd[0] = L'\0';
-        ArgAppend(cmd, 8192, ffexe);
+        ArgAppend(cmd, 8192, app->paths.ffmpegExe);
         ArgAppend(cmd, 8192, L"-nostdin");
         ArgAppend(cmd, 8192, L"-hide_banner");
         ArgAppend(cmd, 8192, L"-y");
@@ -315,9 +330,10 @@ unsigned __stdcall TranscribeThread(void *argp)
         WCHAR *tw = Utf8ToWide(clean);
         free(clean);
 
-        /* temp media no longer needed */
+        /* temp media no longer needed (never the user's own file) */
         DeleteFileW(wav);
-        DeleteFileW(audioW);
+        if (!a->isLocal)
+            DeleteFileW(audioW);
         free(audioW);
         audioW = NULL;
 

@@ -292,7 +292,7 @@ char *SummarizeTranscript(AppState *app, HWND ui, const char *t)
 static double LoadSummRate(AppState *app)
 {
     WCHAR p[MAX_PATH];
-    _snwprintf(p, MAX_PATH, L"%s\\summ_perf.cfg", app->paths.exeDir);
+    _snwprintf(p, MAX_PATH, L"%s\\summ_perf.cfg", app->paths.dataDir);
     p[MAX_PATH - 1] = L'\0';
     char *s = ReadFileUtf8(p);
     double r = s ? atof(s) : 0.0;
@@ -308,7 +308,7 @@ static void SaveSummRate(AppState *app, double msPerKchar)
     char buf[64];
     snprintf(buf, sizeof buf, "%.1f", next);
     WCHAR p[MAX_PATH];
-    _snwprintf(p, MAX_PATH, L"%s\\summ_perf.cfg", app->paths.exeDir);
+    _snwprintf(p, MAX_PATH, L"%s\\summ_perf.cfg", app->paths.dataDir);
     p[MAX_PATH - 1] = L'\0';
     WriteFileUtf8(p, buf);
 }

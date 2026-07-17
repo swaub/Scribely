@@ -35,7 +35,7 @@ BOOL DownloadFile(HWND hwnd, int assetIndex, LPCWSTR url, LPCWSTR destPath)
     if ((size_t)lstrlenW(object) + (size_t)lstrlenW(extra) < ARRAYSIZE(object))
         lstrcatW(object, extra);
 
-    hSession = WinHttpOpen(L"YTTranscript/1.0",
+    hSession = WinHttpOpen(L"Scribely/2.0",
                            WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                            WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession)

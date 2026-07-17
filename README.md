@@ -1,28 +1,35 @@
-# YTTranscript
+# Scribely
 
-A single-file native **Windows desktop app** (`YTTranscript.exe`) that
-**transcribes** a YouTube video and **summarizes** it — fully offline after
-first run. CPU works out of the box; optional **Vulkan / CUDA** GPU
+*(formerly YTTranscript — the last YouTube-only version remains available on the
+[Releases](https://github.com/swaub/Scribely/releases) page.)*
+
+A single-file native **Windows desktop app** (`Scribely.exe`) that
+**transcribes** a YouTube video *or any local audio/video file* and
+**summarizes** it — fully offline after first run. Drop in an `.mp3`, `.wav`,
+`.flac`, `.ogg`/`.opus` (Discord voice messages), `.m4a`, or a video file
+(`.mp4`, `.mkv`, `.webm`, `.mov`, …) and get punctuated text and a local AI
+summary. CPU works out of the box; optional **Vulkan / CUDA** GPU
 acceleration is a click away in Settings. Written in **pure C11 / Win32** and
 cross-compiled from **WSL** with **mingw-w64**.
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 ![Platform: Windows 10/11 x64](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-blue)
 
-Paste a URL, click **Transcribe** (yt-dlp -> ffmpeg -> whisper.cpp), then
+Paste a URL — or click **Open…** / drag-and-drop a media file onto the
+window — then click **Transcribe** (yt-dlp -> ffmpeg -> whisper.cpp; local
+files skip yt-dlp and are never modified or deleted), then
 click **Summarize** (a bundled Qwen2.5-3B instruct model via llama.cpp,
 map-reduced so arbitrarily long transcripts fit the context window), then
 **Copy** the summary to the clipboard.
 
 <p align="center">
-  <img src="docs/screenshot.png" alt="YTTranscript transcribing and summarizing a YouTube video" width="760">
+  <img src="docs/screenshot.png" alt="Scribely transcribing and summarizing a voice message" width="760">
 </p>
 
-> **Install (end users):** download `YTTranscript-Setup-x.y.z.exe` from the
-> [Releases](https://github.com/swaub/YTTranscript/releases) page, run it, choose
-> a **writable** folder (the per-user default is fine; avoid `Program Files`),
-> and launch. The first run downloads the components it needs; after that it
-> starts instantly.
+> **Install (end users):** download `Scribely-Setup-x.y.z.exe` from the
+> [Releases](https://github.com/swaub/Scribely/releases) page, run it, and
+> launch. The first run downloads the components it needs into
+> `%LOCALAPPDATA%\Scribely`; after that it starts instantly.
 
 ---
 
@@ -84,7 +91,7 @@ or:
 make
 ```
 
-Both produce **`dist/YTTranscript.exe`**, a statically linked executable
+Both produce **`dist/Scribely.exe`**, a statically linked executable
 (`-static` bundles libgcc/winpthread, so there are no extra runtime DLLs
 to ship). `-municode` makes `wWinMain` the entry point and `-mwindows`
 selects the GUI subsystem (no console window).
@@ -98,8 +105,9 @@ resolve relative to the `res/` directory.
 Two `.ico` files are referenced by `res/app.rc` and must exist before the
 resource compiles:
 
-- `res/icon.ico` — the app/window/taskbar icon: a YouTube-style red
-  rounded square with a white play triangle, multi-size (16/32/48/256).
+- `res/icon.ico` — the app/window/taskbar icon: a violet rounded square
+  with a white waveform flowing into transcript lines, multi-size
+  (16/32/48/256), generated from `res/icon_master.png`.
 - `res/clipboard.ico` — a 16x16 clipboard glyph used on the **Copy**
   button.
 
@@ -146,11 +154,16 @@ magick clip-16.png  res/clipboard.ico
 └── README.md
 ```
 
-At runtime, **next to the .exe** (all paths derived from
-`GetModuleFileNameW`, never the working directory):
+At runtime the downloaded components live in the per-user store
+**`%LOCALAPPDATA%\Scribely`** (so the exe can be moved, updated or
+reinstalled without re-downloading anything). Legacy installs that already
+have a `bin\` + `models\` store next to the exe keep using it in place.
+A working system-wide `ffmpeg`/`yt-dlp` (on `PATH`, or `C:\ffmpeg\bin` for
+ffmpeg) is detected, validated with `-version`, and reused instead of
+downloading a bundled copy:
 
 ```
-YTTranscript.exe
+%LOCALAPPDATA%\Scribely\   (or the exe's folder for legacy installs)
 bin\
   yt-dlp.exe
   ffmpeg.exe
@@ -238,10 +251,12 @@ small `installed.cfg` file next to the `.exe` (`key=version` per line):
 
 ## Usage
 
-1. Launch `YTTranscript.exe`. On first run, wait for the bootstrap
+1. Launch `Scribely.exe`. On first run, wait for the bootstrap
    download/extract to finish (progress shows in the status line + bar).
 2. Paste a YouTube URL (`youtube.com/watch`, `youtu.be/...`,
-   `youtube.com/shorts/...`, `/live/...`).
+   `youtube.com/shorts/...`, `/live/...`) — or click **Open…** to pick a
+   local audio/video file, or simply drag one onto the window (transcription
+   starts immediately for files).
 3. Click **Transcribe**. The audio is downloaded, converted to 16 kHz mono
    WAV, and transcribed; the punctuated text appears in the transcript box
    and is also written to `output\<video-id>.txt`.
@@ -311,7 +326,7 @@ argument after `--` — `cmd.exe`/`system()` are never used.
 
 ## License
 
-YTTranscript's own source code is licensed under the **[MIT License](LICENSE)**.
+Scribely's own source code is licensed under the **[MIT License](LICENSE)**.
 
 The third-party tools and models it **downloads at runtime** (yt-dlp, FFmpeg,
 whisper.cpp, llama.cpp, and the Whisper and Qwen2.5 models) are **not** bundled

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# WSL cross-build for YTTranscript.exe (mingw-w64 -> Windows x86_64).
+# WSL cross-build for Scribely.exe (mingw-w64 -> Windows x86_64).
 #
 # Prerequisite (one time):
 #   sudo apt-get install -y gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64
 #
-# Produces: dist/YTTranscript.exe
+# Produces: dist/Scribely.exe
 #
 set -euo pipefail
 
@@ -26,7 +26,7 @@ SRCS=(
 
 LDLIBS=(
   -lcomctl32 -lwinhttp -lshlwapi -ldxgi -ldxguid
-  -luser32 -lgdi32 -lkernel32
+  -luser32 -lgdi32 -lkernel32 -lcomdlg32 -lshell32
 )
 
 mkdir -p dist
@@ -36,9 +36,9 @@ mkdir -p dist
 "$WINDRES" -c 65001 -I res res/app.rc -O coff -o dist/app.res
 
 "$CC" "${CFLAGS[@]}" \
-  -o dist/YTTranscript.exe \
+  -o dist/Scribely.exe \
   "${SRCS[@]}" \
   dist/app.res \
   "${LDLIBS[@]}"
 
-echo "BUILT dist/YTTranscript.exe"
+echo "BUILT dist/Scribely.exe"

@@ -1,7 +1,7 @@
-# Third-Party Notices for YTTranscript
+# Third-Party Notices for Scribely
 
-YTTranscript downloads the following third-party components **at runtime**. They
-are **not** bundled with, or redistributed by, the YTTranscript installer or
+Scribely downloads the following third-party components **at runtime**. They
+are **not** bundled with, or redistributed by, the Scribely installer or
 source repository — the application fetches them automatically on first run (or
 on demand, for the optional GPU backends). Each component is governed by its own
 license, summarized below.
@@ -57,7 +57,7 @@ license, summarized below.
 - **License text:** https://huggingface.co/Qwen/Qwen2.5-3B/blob/main/LICENSE
 - **SPDX:** none (proprietary research license)
 
-> ⚠️ Because the default summarization model is non-commercial, YTTranscript as
+> ⚠️ Because the default summarization model is non-commercial, Scribely as
 > shipped is intended for personal / non-commercial use. To use it commercially,
 > swap the summarizer for an Apache-2.0 model (e.g. a different Qwen2.5 size or a
 > Llama model).

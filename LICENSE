@@ -22,7 +22,7 @@ SOFTWARE.
 
 ---
 
-NOTE: This license covers YTTranscript's own source code only. YTTranscript
+NOTE: This license covers Scribely's own source code only. Scribely (formerly YTTranscript)
 downloads several third-party programs and model files at runtime (yt-dlp,
 FFmpeg, whisper.cpp, llama.cpp, and the Whisper and Qwen2.5 models). Those
 components are not distributed with this software and are each governed by

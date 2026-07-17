@@ -2,7 +2,7 @@
 #define YTT_COMMON_H
 
 /* ------------------------------------------------------------------ *
- *  YTTranscript.exe  --  shared contract for every translation unit.
+ *  Scribely.exe  --  shared contract for every translation unit.
  *  Pure C11 / Win32 only.  Compiled by main, ui, util, proc, pipeline,
  *  strutil, summarize, download, bootstrap, clipboard.  This header
  *  emits NO symbols (only macros, types, prototypes) so including it
@@ -46,7 +46,8 @@ enum {
     IDC_SUMMARIZE  = 1006,
     IDC_SUMMARY    = 1007,
     IDC_COPY       = 1008,
-    IDC_CANCEL     = 1009
+    IDC_CANCEL     = 1009,
+    IDC_BROWSE     = 1010
 };
 
 /* ============= Worker -> UI messages (PostMessageW ONLY) ==========
@@ -98,15 +99,20 @@ enum { ENGINE_CPU, ENGINE_CUDA, ENGINE_VULKAN };
 
 /* =========================== Shared types ========================= */
 
-/* All paths resolved from GetModuleFileNameW, never the CWD. */
+/* All paths resolved from GetModuleFileNameW / SHGetFolderPathW, never the
+ * CWD.  dataDir is the component store: %LOCALAPPDATA%\Scribely for new
+ * installs, or the exe's own folder when a legacy exe-side store exists. */
 typedef struct {
-    WCHAR exeDir [MAX_PATH];  /* folder holding YTTranscript.exe         */
-    WCHAR bin    [MAX_PATH];  /* exeDir\\bin                              */
-    WCHAR whisper[MAX_PATH];  /* exeDir\\bin\\whisper  (own ggml DLLs)    */
-    WCHAR llama  [MAX_PATH];  /* exeDir\\bin\\llama    (own ggml DLLs)    */
-    WCHAR models [MAX_PATH];  /* exeDir\\models                          */
-    WCHAR temp   [MAX_PATH];  /* exeDir\\temp   (m4a/wav/_prompt.txt)     */
-    WCHAR output [MAX_PATH];  /* exeDir\\output (<id>.txt transcript)     */
+    WCHAR exeDir [MAX_PATH];  /* folder holding Scribely.exe             */
+    WCHAR dataDir[MAX_PATH];  /* component store root (see above)         */
+    WCHAR bin    [MAX_PATH];  /* dataDir\\bin                             */
+    WCHAR whisper[MAX_PATH];  /* dataDir\\bin\\whisper (own ggml DLLs)    */
+    WCHAR llama  [MAX_PATH];  /* dataDir\\bin\\llama   (own ggml DLLs)    */
+    WCHAR models [MAX_PATH];  /* dataDir\\models                         */
+    WCHAR temp   [MAX_PATH];  /* dataDir\\temp  (m4a/wav/_prompt.txt)     */
+    WCHAR output [MAX_PATH];  /* dataDir\\output (<id>.txt transcript)    */
+    WCHAR ffmpegExe[MAX_PATH];/* resolved ffmpeg (bundled or system)      */
+    WCHAR ytdlpExe [MAX_PATH];/* resolved yt-dlp (bundled or system)      */
 } AppPaths;
 
 /* One first-run download manifest entry. */
@@ -134,7 +140,7 @@ typedef void (*LineCb)(void *ud, const char *utf8_line);
 typedef struct {
     HWND  hMain;
     HWND  hUrl, hTranscribe, hTranscript, hStatus, hProgress;
-    HWND  hSummarize, hSummary, hCopy, hCancel;
+    HWND  hSummarize, hSummary, hCopy, hCancel, hBrowse;
     HFONT hUiFont;
     HICON hClipIcon;
     AppPaths paths;
@@ -157,7 +163,9 @@ typedef struct {
     HWND      hwnd;
     AppState *app;
     int       stage;           /* STAGE_*                                  */
-    WCHAR     url[2048];       /* validated YouTube URL (transcribe)       */
+    WCHAR     url[2048];       /* validated YouTube URL, or a local media
+                                  file path when isLocal (transcribe)      */
+    BOOL      isLocal;         /* url is an existing local media file      */
     WCHAR    *transcript;      /* heap UTF-16 transcript (summarize)       */
 } WorkerArgs;
 
@@ -184,6 +192,7 @@ unsigned __stdcall EnsureBackendThread(void *args);   /* WorkerArgs* downloads i
 /* ============================ util.c ============================== */
 void   ResolvePaths(AppPaths *p);                   /* fill + CreateDirectory */
 BOOL   IsPlausibleYouTubeUrl(const WCHAR *u);       /* security gate          */
+BOOL   IsSupportedMediaFile(const WCHAR *path);     /* local audio/video file */
 void   PathUnder(const AppPaths *p, WCHAR *out, const WCHAR *rel);
 char  *WideToUtf8(const WCHAR *w);                  /* malloc'd; free()       */
 WCHAR *Utf8ToWide(const char *s);                   /* malloc'd; free()       */

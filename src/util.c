@@ -1,4 +1,5 @@
 #include "common.h"
+#include <shlobj.h>
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
@@ -17,12 +18,31 @@ void ResolvePaths(AppPaths *p)
         p->exeDir[0] = L'\0';
     PathRemoveFileSpecW(p->exeDir);
 
-    PathCombineW(p->bin,     p->exeDir, L"bin");
-    PathCombineW(p->whisper, p->bin,    L"whisper");
-    PathCombineW(p->llama,   p->bin,    L"llama");
-    PathCombineW(p->models,  p->exeDir, L"models");
-    PathCombineW(p->temp,    p->exeDir, L"temp");
-    PathCombineW(p->output,  p->exeDir, L"output");
+    /* Legacy stores (pre-2.0 layout: components beside the exe) keep being
+     * used in place so an update never triggers a ~2.3 GB re-download.
+     * Fresh installs use the per-user %LOCALAPPDATA%\Scribely store, which
+     * survives moving or reinstalling the exe. */
+    WCHAR legacyMark[MAX_PATH], legacyFfmpeg[MAX_PATH];
+    PathCombineW(legacyMark,   p->exeDir, L"installed.cfg");
+    PathCombineW(legacyFfmpeg, p->exeDir, L"bin\\ffmpeg.exe");
+
+    WCHAR appData[MAX_PATH];
+    if (FileExists(legacyMark) || FileExists(legacyFfmpeg)) {
+        lstrcpynW(p->dataDir, p->exeDir, MAX_PATH);
+    } else if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL,
+                                          SHGFP_TYPE_CURRENT, appData))) {
+        PathCombineW(p->dataDir, appData, L"Scribely");
+        EnsureDir(p->dataDir);
+    } else {
+        lstrcpynW(p->dataDir, p->exeDir, MAX_PATH);
+    }
+
+    PathCombineW(p->bin,     p->dataDir, L"bin");
+    PathCombineW(p->whisper, p->bin,     L"whisper");
+    PathCombineW(p->llama,   p->bin,     L"llama");
+    PathCombineW(p->models,  p->dataDir, L"models");
+    PathCombineW(p->temp,    p->dataDir, L"temp");
+    PathCombineW(p->output,  p->dataDir, L"output");
 
     EnsureDir(p->bin);
     EnsureDir(p->whisper);
@@ -30,11 +50,16 @@ void ResolvePaths(AppPaths *p)
     EnsureDir(p->models);
     EnsureDir(p->temp);
     EnsureDir(p->output);
+
+    /* Default tool resolution: the bundled copies.  The bootstrap swaps in
+     * a validated system ffmpeg / yt-dlp when the bundled one is absent. */
+    PathCombineW(p->ffmpegExe, p->bin, L"ffmpeg.exe");
+    PathCombineW(p->ytdlpExe,  p->bin, L"yt-dlp.exe");
 }
 
 void PathUnder(const AppPaths *p, WCHAR *out, const WCHAR *rel)
 {
-    if (!PathCombineW(out, p->exeDir, rel))
+    if (!PathCombineW(out, p->dataDir, rel))
         out[0] = L'\0';
 }
 
@@ -75,6 +100,29 @@ BOOL IsPlausibleYouTubeUrl(const WCHAR *u)
         (hl == sl || host[hl - sl - 1] == L'.'))
         return TRUE;
 
+    return FALSE;
+}
+
+/* Local media files accepted for transcription: anything ffmpeg can turn
+   into 16 kHz WAV.  The path must exist as a real file and carry one of
+   these audio/video extensions. */
+BOOL IsSupportedMediaFile(const WCHAR *path)
+{
+    if (!path || !*path) return FALSE;
+
+    static const WCHAR *const exts[] = {
+        L".mp3", L".wav", L".flac", L".ogg", L".oga", L".opus", L".m4a",
+        L".aac", L".wma", L".mka", L".aif", L".aiff", L".amr",
+        L".mp4", L".m4v", L".mkv", L".webm", L".mov", L".avi", L".wmv",
+        L".ts", L".mts", L".m2ts", L".3gp", L".flv", L".mpg", L".mpeg"
+    };
+
+    const WCHAR *ext = PathFindExtensionW(path);
+    if (!ext || !*ext) return FALSE;
+
+    for (size_t i = 0; i < ARRAYSIZE(exts); ++i)
+        if (_wcsicmp(ext, exts[i]) == 0)
+            return FileExists(path);
     return FALSE;
 }
 

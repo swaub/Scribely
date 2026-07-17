@@ -204,7 +204,7 @@ typedef struct { ManEntry e[MAN_MAX]; int n; } Manifest;
 
 static void ManifestPath(const AppPaths *p, WCHAR *out)
 {
-    PathCombineW(out, p->exeDir, L"installed.cfg");
+    PathCombineW(out, p->dataDir, L"installed.cfg");
 }
 
 static const WCHAR *ManifestGet(const Manifest *m, const WCHAR *key)
@@ -360,6 +360,48 @@ static BOOL DownloadArchive(AppState *app, int idx, const WCHAR *url,
     return FALSE;
 }
 
+/* Run `exe <flag>` and require exit code 0 -- proves the tool actually
+ * executes on this machine, not merely that a file with its name exists. */
+static BOOL ValidateTool(const WCHAR *exe, const WCHAR *flag)
+{
+    WCHAR cmd[MAX_PATH + 32];
+    cmd[0] = L'\0';
+    ArgAppend(cmd, ARRAYSIZE(cmd), exe);
+    ArgAppend(cmd, ARRAYSIZE(cmd), flag);
+
+    ProcResult pr;
+    ZeroMemory(&pr, sizeof pr);
+    BOOL ran = RunProcess(cmd, NULL, NULL, NULL, &pr);
+    BOOL ok = ran && pr.exitCode == 0;
+    free(pr.out);
+    return ok;
+}
+
+/* Find a working system-wide copy of a helper before downloading our own:
+ * PATH first, then (for ffmpeg) the conventional manual-install location.
+ * Only a copy that passes ValidateTool is accepted. */
+static BOOL FindSystemTool(int assetIdx, WCHAR *out)
+{
+    const WCHAR *name = (assetIdx == ASSET_YTDLP) ? L"yt-dlp.exe" : L"ffmpeg.exe";
+    const WCHAR *flag = (assetIdx == ASSET_YTDLP) ? L"--version"  : L"-version";
+
+    WCHAR found[MAX_PATH];
+    if (SearchPathW(NULL, name, NULL, ARRAYSIZE(found), found, NULL) > 0 &&
+        ValidateTool(found, flag)) {
+        lstrcpynW(out, found, MAX_PATH);
+        return TRUE;
+    }
+
+    if (assetIdx == ASSET_FFMPEG) {
+        lstrcpynW(found, L"C:\\ffmpeg\\bin\\ffmpeg.exe", ARRAYSIZE(found));
+        if (FileExists(found) && ValidateTool(found, flag)) {
+            lstrcpynW(out, found, MAX_PATH);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 BOOL AssetsPresent(const AppPaths *p)
 {
     for (int i = 0; i < ASSET_COUNT; i++) {
@@ -375,11 +417,10 @@ BOOL AssetsPresent(const AppPaths *p)
  * pre-manifest install is adopted with its real tag instead of a guess. */
 static BOOL GetInstalledYtdlpVersion(AppState *app, WCHAR *out, size_t cap)
 {
-    WCHAR exe[MAX_PATH], cmd[MAX_PATH + 32];
-    PathCombineW(exe, app->paths.bin, L"yt-dlp.exe");
+    WCHAR cmd[MAX_PATH + 32];
 
     cmd[0] = L'\0';
-    ArgAppend(cmd, ARRAYSIZE(cmd), exe);
+    ArgAppend(cmd, ARRAYSIZE(cmd), app->paths.ytdlpExe);
     ArgAppend(cmd, ARRAYSIZE(cmd), L"--version");
 
     ProcResult pr;
@@ -499,6 +540,23 @@ unsigned __stdcall BootstrapThread(void *args)
 
         const AssetSpec *spec = &g_assets[i];
         WCHAR recordVer[160];
+
+        /* Prefer a working system-wide ffmpeg / yt-dlp over downloading our
+         * own copy.  A system tool is managed (and updated) by whatever
+         * installed it, so the manifest and freshness checks don't apply. */
+        if (i == ASSET_YTDLP || i == ASSET_FFMPEG) {
+            WCHAR bundled[MAX_PATH], sys[MAX_PATH];
+            PathUnder(&app->paths, bundled, spec->dest);
+            if (!(FileExists(bundled) && FileSizeAtLeast(bundled, spec->minBytes)) &&
+                FindSystemTool(i, sys)) {
+                if (i == ASSET_YTDLP)
+                    lstrcpynW(app->paths.ytdlpExe, sys, MAX_PATH);
+                else
+                    lstrcpynW(app->paths.ffmpegExe, sys, MAX_PATH);
+                PostMessageW(hwnd, WM_APP_DL_DONE, (WPARAM)i, 0);
+                continue;
+            }
+        }
 
         if (!NeedsDownload(app, i, &man, &manDirty, recordVer, ARRAYSIZE(recordVer))) {
             PostMessageW(hwnd, WM_APP_DL_DONE, (WPARAM)i, 0);
